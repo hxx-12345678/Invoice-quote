@@ -12,55 +12,15 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const express_rate_limit_1 = require("express-rate-limit");
 function setupAppMiddleware(app) {
+    // Security middleware
+    app.use((0, helmet_1.default)());
+    // CORS configuration
     const corsOrigin = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',');
-    // Security middleware with strict CSP
-    app.use((0, helmet_1.default)({
-        contentSecurityPolicy: {
-            directives: {
-                defaultSrc: ["'self'"],
-                scriptSrc: ["'self'", "'unsafe-inline'"],
-                styleSrc: ["'self'", "'unsafe-inline'"],
-                imgSrc: ["'self'", "data:", "blob:"],
-                connectSrc: ["'self'", ...corsOrigin],
-                fontSrc: ["'self'"],
-                objectSrc: ["'none'"],
-                mediaSrc: ["'self'"],
-                frameSrc: ["'none'"],
-            },
-        },
-        crossOriginEmbedderPolicy: true,
-        crossOriginOpenerPolicy: true,
-        crossOriginResourcePolicy: { policy: "cross-origin" },
-        dnsPrefetchControl: { allow: false },
-        frameguard: { action: "deny" },
-        hidePoweredBy: true,
-        hsts: {
-            maxAge: 31536000,
-            includeSubDomains: true,
-            preload: true,
-        },
-        ieNoOpen: true,
-        noSniff: true,
-        originAgentCluster: true,
-        permittedCrossDomainPolicies: { permittedPolicies: "none" },
-        referrerPolicy: { policy: "no-referrer" },
-        xssFilter: true,
-    }));
-    // CORS configuration - hardened
     app.use((0, cors_1.default)({
-        origin: (origin, callback) => {
-            if (!origin || corsOrigin.indexOf(origin) !== -1) {
-                callback(null, true);
-            }
-            else {
-                callback(new Error('Not allowed by CORS'));
-            }
-        },
+        origin: corsOrigin,
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-        exposedHeaders: ['Content-Range', 'X-Content-Range'],
-        maxAge: 86400, // 24 hours
+        allowedHeaders: ['Content-Type', 'Authorization'],
     }));
     // Logging middleware
     if (process.env.NODE_ENV === 'development') {
@@ -72,33 +32,28 @@ function setupAppMiddleware(app) {
     // Body parsing middleware
     app.use(express_1.default.json({ limit: '10mb' }));
     app.use(express_1.default.urlencoded({ limit: '10mb', extended: true }));
-    // Rate limiting - General API
+    // Rate limiting (exclude auth routes)
     const limiter = (0, express_rate_limit_1.rateLimit)({
-        windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
+        windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
         max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
-        standardHeaders: true,
-        legacyHeaders: false,
         message: {
             success: false,
             error: 'TOO_MANY_REQUESTS',
-            message: 'Too many requests from this IP, please try again later.',
+            message: 'Too many requests from this IP, please try again later.'
         },
     });
     app.use('/api/', limiter);
-    // Rate limiting - Auth (Login/Register) - Much stricter
+    // Separate limiter for auth with higher limit
     const authLimiter = (0, express_rate_limit_1.rateLimit)({
         windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 5, // 5 attempts per window
-        standardHeaders: true,
-        legacyHeaders: false,
+        max: 100, // 100 attempts per 15 minutes for testing
         message: {
             success: false,
             error: 'TOO_MANY_AUTH_ATTEMPTS',
-            message: 'Too many authentication attempts. Please try again after 15 minutes.',
+            message: 'Too many authentication attempts. Please try again after 15 minutes.'
         },
     });
-    app.use('/api/auth/login', authLimiter);
-    app.use('/api/auth/register', authLimiter);
+    app.use('/api/auth', authLimiter);
     // Health check endpoint
     app.get('/health', (req, res) => {
         res.json({

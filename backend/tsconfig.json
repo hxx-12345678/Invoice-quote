@@ -9,8 +9,9 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": ".",
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "resolveJsonModule": true,
+    "ignoreDeprecations": "6.0",
     "typeRoots": ["./node_modules/@types", "./types"]
   },
   "include": [
