@@ -2,36 +2,70 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { businessService } from '../services/businessService';
 import { success, fail } from '../utils/response';
-import { logAudit } from '../utils/auditLogger';
+
+// Helper to validate URLs or data URLs
+const urlOrDataUrl = z.string().refine(
+  (val) => {
+    if (!val) return true; // Empty is handled by optional()
+    // Allow data URLs (from file uploads)
+    if (val.startsWith('data:')) return true;
+    // Allow regular URLs
+    try {
+      new URL(val);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: 'Must be a valid URL or data URL' }
+);
+
+// Helper to validate website URLs (more lenient)
+const websiteUrl = z.string().refine(
+  (val) => {
+    if (!val) return true; // Empty is handled by optional()
+    // Accept with or without protocol
+    const urlStr = val.startsWith('http') ? val : `https://${val}`;
+    try {
+      new URL(urlStr);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: 'Must be a valid website URL' }
+);
 
 const businessSchema = z.object({
-  businessType: z.string().min(1),
-  businessName: z.string().min(1),
-  legalName: z.string().min(1),
-  registrationNumber: z.string().optional(),
-  taxId: z.string().optional(),
-  panNumber: z.string().optional(),
-  country: z.string().min(1),
-  state: z.string().min(1),
-  city: z.string().min(1),
-  address: z.string().min(1),
-  pincode: z.string().min(1),
-  email: z.string().email(),
-  phone: z.string().min(1),
-  website: z.string().url().optional(),
-  logoUrl: z.string().url().optional(),
+  businessType: z.string().min(1, 'Business type is required'),
+  businessName: z.string().min(1, 'Business name is required'),
+  legalName: z.string().min(1, 'Legal name is required'),
+  registrationNumber: z.string().optional().nullable(),
+  taxId: z.string().optional().nullable(),
+  panNumber: z.string().optional().nullable(),
+  country: z.string().min(1, 'Country is required'),
+  state: z.string().min(1, 'State is required'),
+  city: z.string().min(1, 'City is required'),
+  address: z.string().min(1, 'Address is required'),
+  pincode: z.string().min(1, 'Pincode is required'),
+  email: z.string().email('Must be a valid email address'),
+  phone: z.string().min(1, 'Phone number is required'),
+  website: websiteUrl.optional().nullable(),
+  logoUrl: urlOrDataUrl.optional().nullable(),
   bankDetails: z
     .object({
-      bankName: z.string().min(1),
-      accountNumber: z.string().min(1),
-      ifscCode: z.string().optional(),
-      swiftCode: z.string().optional(),
-      routingNumber: z.string().optional(),
-      iban: z.string().optional(),
-      accountHolderName: z.string().min(1),
-      branch: z.string().optional(),
+      bankName: z.string().min(1, 'Bank name is required'),
+      accountNumber: z.string().min(1, 'Account number is required'),
+      ifscCode: z.string().optional().nullable(),
+      swiftCode: z.string().optional().nullable(),
+      routingNumber: z.string().optional().nullable(),
+      iban: z.string().optional().nullable(),
+      accountHolderName: z.string().min(1, 'Account holder name is required'),
+      branch: z.string().optional().nullable(),
     })
-    .optional(),
+    .strict()
+    .optional()
+    .nullable(),
 });
 
 export async function getBusinessProfile(req: Request, res: Response, next: NextFunction) {
@@ -50,23 +84,26 @@ export async function getBusinessProfile(req: Request, res: Response, next: Next
 export async function createBusinessProfile(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id as string;
-    const parsed = businessSchema.parse(req.body);
+    
+    // Clean up data: convert empty strings to undefined for optional fields
+    const cleanData = Object.fromEntries(
+      Object.entries(req.body).map(([key, value]) => [
+        key,
+        value === '' ? undefined : value,
+      ])
+    );
+
+    const parsed = businessSchema.parse(cleanData);
     const profile = await businessService.createOrUpdate(userId, parsed);
-
-    // SOC 2: Audit log for business profile update/create
-    await logAudit({
-      userId,
-      action: 'UPDATE',
-      entity: 'BUSINESS_PROFILE',
-      entityId: profile.id,
-      newData: profile,
-      metadata: { businessName: profile.businessName }
-    });
-
     return success(res, profile, 'Business profile saved successfully');
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return fail(res, 400, 'VALIDATION_ERROR', error.errors.map((e) => e.message).join(', '));
+      // Format errors to show field and reason
+      const errorMessages = error.errors.map((e) => {
+        const field = e.path.join('.');
+        return `${field}: ${e.message}`;
+      });
+      return fail(res, 400, 'VALIDATION_ERROR', errorMessages.join(' | '));
     }
     next(error);
   }
@@ -75,12 +112,26 @@ export async function createBusinessProfile(req: Request, res: Response, next: N
 export async function updateBusinessProfile(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user?.id as string;
-    const parsed = businessSchema.partial().parse(req.body);
+    
+    // Clean up data: convert empty strings to undefined for optional fields
+    const cleanData = Object.fromEntries(
+      Object.entries(req.body).map(([key, value]) => [
+        key,
+        value === '' ? undefined : value,
+      ])
+    );
+
+    const parsed = businessSchema.partial().parse(cleanData);
     const profile = await businessService.update(userId, parsed);
     return success(res, profile, 'Business profile updated successfully');
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return fail(res, 400, 'VALIDATION_ERROR', error.errors.map((e) => e.message).join(', '));
+      // Format errors to show field and reason
+      const errorMessages = error.errors.map((e) => {
+        const field = e.path.join('.');
+        return `${field}: ${e.message}`;
+      });
+      return fail(res, 400, 'VALIDATION_ERROR', errorMessages.join(' | '));
     }
     next(error);
   }

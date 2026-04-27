@@ -117,33 +117,81 @@ export function SettingsView({ onProfileUpdated }: SettingsViewProps) {
   const handleSaveProfile = async () => {
     if (profile) {
       try {
-        // Prepare data for API: Zod doesn't like nulls for optional fields, prefers undefined
-        // Also handle BankDetails | BankDetails[] union for the backend which expects an object
-        const apiData = {
-          ...profile,
-          businessType: profile.businessType || 'enterprise',
-          legalName: profile.legalName || profile.businessName,
-          bankDetails: Array.isArray(profile.bankDetails) 
-            ? profile.bankDetails[0] 
-            : profile.bankDetails
+        // Validate required fields
+        const requiredFields = {
+          businessType: 'Business Type',
+          businessName: 'Business Name',
+          legalName: 'Legal Name',
+          country: 'Country',
+          state: 'State',
+          city: 'City',
+          address: 'Address',
+          pincode: 'PIN/ZIP',
+          email: 'Email',
+          phone: 'Phone',
         };
 
-        // Clean null values to undefined
-        Object.keys(apiData).forEach(key => {
-          if ((apiData as any)[key] === null) {
-            delete (apiData as any)[key];
-          }
-        });
+        const missingFields = Object.entries(requiredFields).filter(
+          ([key, label]) => !profile[key as keyof typeof profile]
+        );
 
-        await ApiService.business.update(apiData);
-        BusinessProfileStore.set({ ...profile, updatedAt: new Date() });
+        if (missingFields.length > 0) {
+          toast.error(`Missing required fields: ${missingFields.map(([_, label]) => label).join(', ')}`);
+          return;
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(profile.email)) {
+          toast.error('Please enter a valid email address');
+          return;
+        }
+
+        // Prepare data for API
+        const apiData: any = {
+          businessType: profile.businessType,
+          businessName: profile.businessName,
+          legalName: profile.legalName,
+          country: profile.country,
+          state: profile.state,
+          city: profile.city,
+          address: profile.address,
+          pincode: profile.pincode,
+          email: profile.email,
+          phone: profile.phone,
+          // Add optional fields only if they have values
+          ...(profile.website && profile.website.trim() && { website: profile.website }),
+          ...(profile.logoUrl && profile.logoUrl.trim() && { logoUrl: profile.logoUrl }),
+          ...(profile.registrationNumber && profile.registrationNumber.trim() && { registrationNumber: profile.registrationNumber }),
+          ...(profile.taxId && profile.taxId.trim() && { taxId: profile.taxId }),
+          ...(profile.panNumber && profile.panNumber.trim() && { panNumber: profile.panNumber }),
+        };
+
+        // Handle bank details - only include if bankName is provided
+        const bankData = Array.isArray(profile.bankDetails) ? profile.bankDetails[0] : profile.bankDetails;
+        if (bankData && bankData.bankName && bankData.bankName.trim()) {
+          apiData.bankDetails = {
+            bankName: bankData.bankName,
+            accountNumber: bankData.accountNumber || '',
+            accountHolderName: bankData.accountHolderName || '',
+            ...(bankData.ifscCode && { ifscCode: bankData.ifscCode }),
+            ...(bankData.swiftCode && { swiftCode: bankData.swiftCode }),
+            ...(bankData.routingNumber && { routingNumber: bankData.routingNumber }),
+            ...(bankData.iban && { iban: bankData.iban }),
+            ...(bankData.branch && { branch: bankData.branch }),
+          };
+        }
+
+        const response = await ApiService.business.update(apiData);
+        BusinessProfileStore.set({ ...response.data.data, updatedAt: new Date() });
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
         toast.success('Business profile updated successfully');
         onProfileUpdated?.();
-      } catch (error) {
+      } catch (error: any) {
         console.error('Save profile error:', error);
-        toast.error('Failed to update business profile');
+        const errorMessage = error.response?.data?.message || 'Failed to update business profile';
+        toast.error(errorMessage);
       }
     }
   };
@@ -810,32 +858,6 @@ export function SettingsView({ onProfileUpdated }: SettingsViewProps) {
                     />
                   </div>
                 ))}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Template Layout</Label>
-                  <Select 
-                    value={currentTemplate?.layout || 'modern'} 
-                    onValueChange={(v) => updateTemplate('layout', v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="modern">Modern (Sleek)</SelectItem>
-                      <SelectItem value="traditional">Traditional (Industrial/GST)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Border Radius (e.g. 8px)</Label>
-                  <Input 
-                    value={currentTemplate?.borderRadius || '8px'}
-                    onChange={(e) => updateTemplate('borderRadius', e.target.value)}
-                    placeholder="8px"
-                  />
-                </div>
               </div>
 
               <Separator />
