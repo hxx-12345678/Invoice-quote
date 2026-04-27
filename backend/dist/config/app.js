@@ -12,23 +12,16 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const express_rate_limit_1 = require("express-rate-limit");
 function setupAppMiddleware(app) {
+    // Trust proxy for Render and other reverse proxies
+    if (process.env.NODE_ENV === 'production') {
+        app.set('trust proxy', 1);
+    }
     // Security middleware
     app.use((0, helmet_1.default)());
     // CORS configuration
-    const corsOrigins = [
-        ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []),
-        process.env.FRONTEND_URL,
-        'http://localhost:3000'
-    ].filter(Boolean);
+    const corsOrigin = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',');
     app.use((0, cors_1.default)({
-        origin: function (origin, callback) {
-            if (!origin || corsOrigins.includes(origin)) {
-                callback(null, true);
-            }
-            else {
-                callback(new Error('Not allowed by CORS'));
-            }
-        },
+        origin: corsOrigin,
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
@@ -52,6 +45,17 @@ function setupAppMiddleware(app) {
             error: 'TOO_MANY_REQUESTS',
             message: 'Too many requests from this IP, please try again later.'
         },
+        skip: (req) => {
+            // Don't rate limit health checks and local requests
+            return req.path === '/health' || req.path === '/api/health';
+        },
+        keyGenerator: (req) => {
+            // For production, use X-Forwarded-For header (set by Render proxy)
+            if (process.env.NODE_ENV === 'production') {
+                return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+            }
+            return req.ip || 'unknown';
+        },
     });
     app.use('/api/', limiter);
     // Separate limiter for auth with higher limit
@@ -62,6 +66,13 @@ function setupAppMiddleware(app) {
             success: false,
             error: 'TOO_MANY_AUTH_ATTEMPTS',
             message: 'Too many authentication attempts. Please try again after 15 minutes.'
+        },
+        keyGenerator: (req) => {
+            // For production, use X-Forwarded-For header (set by Render proxy)
+            if (process.env.NODE_ENV === 'production') {
+                return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+            }
+            return req.ip || 'unknown';
         },
     });
     app.use('/api/auth', authLimiter);
