@@ -1,0 +1,14 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @media (prefers-color-scheme: light) {
+      .background { fill: #0f172a; }
+      .foreground { fill: white; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .background { fill: white; }
+      .foreground { fill: #0f172a; }
+    }
+  </style>
+  <rect class="background" width="180" height="180" rx="40" />
+  <path class="foreground" d="M50 50H130V70L80 110H130V130H50V110L100 70H50V50Z" />
+</svg>
