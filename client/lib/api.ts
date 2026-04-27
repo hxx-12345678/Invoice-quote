@@ -2,10 +2,14 @@ import axios from 'axios';
 
 let API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
+// Strip any trailing slashes first
+API_URL = API_URL.replace(/\/+$/, '');
+
 // Automatically append /api if the environment variable missed it
-if (API_URL && !API_URL.endsWith('/api')) {
-  API_URL = API_URL.replace(/\/$/, '') + '/api';
+if (!API_URL.endsWith('/api')) {
+  API_URL = `${API_URL}/api`;
 }
+
 
 const api = axios.create({
   baseURL: API_URL,
