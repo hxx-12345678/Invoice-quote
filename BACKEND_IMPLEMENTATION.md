@@ -1,7 +1,7 @@
-# 🚀 Quotiq Backend Implementation Summary
+# 🚀 InvoiceFlow Backend Implementation Summary
 
 ## Overview
-Complete production-ready backend infrastructure for the Quotiq invoice & quote management platform.
+Complete production-ready backend infrastructure for the InvoiceFlow invoice & quote management platform.
 
 ---
 
@@ -305,9 +305,9 @@ pnpm install
 ```bash
 # Create database
 psql -U postgres
-CREATE DATABASE quotiq_db;
-CREATE USER quotiq WITH PASSWORD 'quotiq';
-GRANT ALL PRIVILEGES ON DATABASE quotiq_db TO quotiq;
+CREATE DATABASE invoiceflow_db;
+CREATE USER invoiceflow WITH PASSWORD 'invoiceflow';
+GRANT ALL PRIVILEGES ON DATABASE invoiceflow_db TO invoiceflow;
 ```
 
 ### Step 3: Run Migrations

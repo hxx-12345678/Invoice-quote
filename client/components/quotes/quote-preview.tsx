@@ -11,7 +11,6 @@ import {
   formatCurrency,
   formatDate,
 } from '@/lib/store';
-import { cn, numberToWords } from '@/lib/utils';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -80,7 +79,6 @@ export function QuotePreview({ quote: initialQuote, onBack, onEdit, onConverted,
   const [clientComment, setClientComment] = useState('');
   const [shareToast, setShareToast] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isQuickEdit, setIsQuickEdit] = useState(false);
 
   // Sharing Dialog State
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -98,69 +96,36 @@ export function QuotePreview({ quote: initialQuote, onBack, onEdit, onConverted,
   const previewRef = useRef<HTMLDivElement | null>(null);
   const templates = TemplateStore.get();
   const template = templates.quoteTemplate;
-  const grandTotalInWords = useMemo(() => numberToWords(currentQuote.grandTotal), [currentQuote.grandTotal]);
-  
-  const bankDetails = useMemo(() => {
-    if (!businessProfile?.bankDetails) return null;
-    return Array.isArray(businessProfile.bankDetails) ? businessProfile.bankDetails[0] : businessProfile.bankDetails;
-  }, [businessProfile]);
 
   const generatePdfBlob = async () => {
     if (!previewRef.current) {
       throw new Error('Preview not available for PDF generation');
     }
-    
-    // Scale up for high quality
-    const canvas = await (html2canvas as any)(previewRef.current, {
+    const canvas = await html2canvas(previewRef.current, {
       scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
-      onclone: (clone: any) => {
-        const styleTags = clone.getElementsByTagName('style');
+      onclone: (clonedDoc: globalThis.Document) => {
+        const styleTags = clonedDoc.getElementsByTagName('style');
         for (let i = 0; i < styleTags.length; i++) {
-          const style = styleTags[i];
-          if (style.innerHTML) {
-            style.innerHTML = style.innerHTML.replace(/(oklch|oklab|lab|lch|color-mix)\([^)]+\)/g, '#000000');
-          }
-        }
-        const allElements = clone.getElementsByTagName('*');
-        for (let i = 0; i < allElements.length; i++) {
-          const el = allElements[i];
-          if (el.style && el.style.cssText) {
-            el.style.cssText = el.style.cssText.replace(/(oklch|oklab|lab|lch|color-mix)\([^)]+\)/g, '#000000');
+          let css = styleTags[i].innerHTML;
+          if (css.includes('oklch(') || css.includes('lab(')) {
+            styleTags[i].innerHTML = css.replace(/oklch\([^)]+\)/g, '#000000').replace(/lab\([^)]+\)/g, '#000000');
           }
         }
       }
-    });
-
+    } as any);
     const imgData = canvas.toDataURL('image/png', 1.0);
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-    
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    
-    // Calculate how many pages we need
+    // Calculate aspect ratio manually to avoid getImageProperties issues
+    const canvasAspectRatio = canvas.width / canvas.height;
     const imgWidth = pageWidth;
-    const imgHeight = (canvasHeight * pageWidth) / canvasWidth;
-    
-    let heightLeft = imgHeight;
-    let position = 0;
+    const imgHeight = pageWidth / canvasAspectRatio;
 
-    // First page
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-    heightLeft -= pageHeight;
-
-    // Subsequent pages if content overflows
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pageHeight;
-    }
-
+    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
     return pdf.output('blob');
   };
 
@@ -425,15 +390,6 @@ export function QuotePreview({ quote: initialQuote, onBack, onEdit, onConverted,
               </span>
             )}
           </Button>
-          <Button 
-            variant={isQuickEdit ? "default" : "outline"} 
-            size="sm" 
-            onClick={() => setIsQuickEdit(!isQuickEdit)} 
-            className="gap-1.5"
-          >
-            <ToggleLeft className={cn("h-3.5 w-3.5", isQuickEdit && "rotate-180")} />
-            Quick Edit PDF
-          </Button>
           <QuoteActivityPanel quote={currentQuote} />
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrint}>
             <Printer className="h-3.5 w-3.5" />
@@ -480,428 +436,209 @@ export function QuotePreview({ quote: initialQuote, onBack, onEdit, onConverted,
       )}
 
       {/* Quote Document */}
-      {template?.layout === 'traditional' ? (
-        <div 
-          ref={previewRef} 
-          className="bg-white text-black p-4 border-2 border-black mx-auto min-h-[1056px] w-full text-[12px] relative"
-          style={{ fontFamily: "'Inter', sans-serif" }}
-        >
-          <div className="absolute top-2 right-4 text-[10px] font-bold">Page 1 of 1</div>
-          
-          {/* Header */}
-          <div className="text-center border-b border-black pb-2 mb-2">
-            <h1 
-              className="text-2xl font-black uppercase tracking-widest outline-none focus:bg-yellow-50"
-              contentEditable={isQuickEdit}
-              suppressContentEditableWarning
-            >
-              {businessProfile?.businessName}
-            </h1>
-            <p className="text-[10px] uppercase outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-              {businessProfile?.address}, {businessProfile?.city}, {businessProfile?.state}-{businessProfile?.pincode}, {businessProfile?.country}
-            </p>
-          </div>
-
-          <div className="text-center border-b border-black py-1 font-bold text-sm uppercase outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-            QUOTATION
-          </div>
-
-          {/* Bill To & Info Grid */}
-          <div className="grid grid-cols-12 border-b border-black min-h-[140px]">
-            <div className="col-span-8 border-r border-black p-1 flex flex-col">
-              <p className="font-bold border-b border-black mb-1 outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                Bill To: {customer?.name}
-              </p>
-              <div className="space-y-0.5 flex-grow outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                {customer?.companyName && <p className="font-medium">{customer.companyName}</p>}
-                <p>{customer?.billingAddress?.street}</p>
-                <p>{customer?.billingAddress?.city}, {customer?.billingAddress?.state} - {customer?.billingAddress?.pincode}</p>
-                <p>{customer?.billingAddress?.country}</p>
-              </div>
-              <p className="font-bold mt-2">GST No: {customer?.taxId || '---'}</p>
-            </div>
-            <div className="col-span-4 p-0">
-              <div className="border-b border-black p-1 flex justify-between">
-                <span>Date:</span>
-                <span className="font-bold">{formatDate(currentQuote.issueDate, settings?.dateFormat)}</span>
-              </div>
-              <div className="border-b border-black p-1 flex justify-between">
-                <span>Quote No:</span>
-                <span className="font-bold">{currentQuote.quoteNumber}</span>
-              </div>
-              <div className="border-b border-black p-1 flex justify-between">
-                <span>Valid Until:</span>
-                <span className="font-bold">{formatDate(currentQuote.expiryDate, settings?.dateFormat)}</span>
-              </div>
-              <div className="p-1 min-h-[40px] outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                <span>Reference:</span>
-                <p className="font-bold text-[10px]">{currentQuote.referenceNumber || '---'}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Ship To Row */}
-          <div className="grid grid-cols-12 border-b border-black">
-            <div className="col-span-8 border-r border-black p-1">
-              <p className="font-bold outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                Ship To: {template?.showShippingAddress && customer?.shippingAddress ? customer.name : '-------'}
-              </p>
-              {template?.showShippingAddress && customer?.shippingAddress && (
-                <div className="text-[10px] outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                  {customer.shippingAddress.street}, {customer.shippingAddress.city}, {customer.shippingAddress.state}
+      <div 
+        ref={previewRef} 
+        className="bg-card border border-border shadow-sm p-8 print:shadow-none print:border-none transition-all duration-300"
+        style={{ 
+          fontFamily: template?.fontFamily || 'Inter, sans-serif',
+          borderRadius: template?.borderRadius || '8px'
+        }}
+      >
+        {/* Header Row */}
+        <div className="flex flex-col lg:flex-row justify-between items-start mb-8 gap-6">
+          <div className="min-w-0">
+            {template?.showLogo && businessProfile?.logoUrl ? (
+              <img src={businessProfile.logoUrl} alt={businessProfile.businessName} className="h-16 object-contain mb-2" />
+            ) : (
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-primary-foreground" />
                 </div>
-              )}
-            </div>
-            <div className="col-span-4">
-              <div className="border-b border-black p-1 flex justify-between">
-                <span>Date :</span>
-                <span className="font-bold">{formatDate(currentQuote.issueDate, settings?.dateFormat)}</span>
-              </div>
-              <div className="p-1 flex justify-between outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                <span>payment :</span>
-                <span className="font-bold">As per terms</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-center border-b border-black py-1 font-bold text-[10px] uppercase flex justify-between px-4 outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-            <span>FOR MONTH OF {new Date(currentQuote.issueDate).toLocaleString('default', { month: 'long', year: 'numeric' }).toUpperCase()}</span>
-            <span>Vehical No : {currentQuote.customFields?.find(f => f.key.toLowerCase().includes('vehicle'))?.value || '--------'}</span>
-          </div>
-
-          {/* Main Table */}
-          <div className="flex-grow">
-            <table className="w-full border-collapse border-b border-black">
-              <thead>
-                <tr className="border-b border-black text-[10px] uppercase font-bold text-center">
-                  <th className="border-r border-black w-8 p-1">SR No.</th>
-                  <th className="border-r border-black w-32 p-1">SALENOTE</th>
-                  <th className="border-r border-black p-1">PARTICULARAS</th>
-                  <th className="border-r border-black w-16 p-1">Material</th>
-                  <th className="border-r border-black w-24 p-1">SAC CODE</th>
-                  <th className="border-r border-black w-12 p-1">QTY</th>
-                  <th className="border-r border-black w-20 p-1">RATE</th>
-                  <th className="border-r border-black w-12 p-1">UNIT</th>
-                  <th className="p-1 w-24">AMOUNT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentQuote.items.map((item, index) => (
-                  <tr key={item.id} className="text-[11px] border-b border-black/10 last:border-b-0 min-h-[35px]">
-                    <td className="border-r border-black p-1 text-center font-bold">{index + 1}</td>
-                    <td className="border-r border-black p-1 text-[9px] text-center font-medium outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                      {item.sku || '---'}
-                    </td>
-                    <td className="border-r border-black p-1">
-                      <p className="font-bold outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>{item.name}</p>
-                      {item.description && <p className="text-[9px] text-gray-700 leading-tight outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>{item.description}</p>}
-                    </td>
-                    <td className="border-r border-black p-1 text-center font-medium outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>CI</td>
-                    <td className="border-r border-black p-1 text-center font-bold outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>{item.sacCode || item.hsnCode || '9954'}</td>
-                    <td className="border-r border-black p-1 text-center font-bold outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>{item.quantity}</td>
-                    <td className="border-r border-black p-1 text-center font-bold outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>{item.unitPrice.toFixed(2)}</td>
-                    <td className="border-r border-black p-1 text-center uppercase font-bold outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>{item.unit || 'Nos'}</td>
-                    <td className="p-1 text-right font-black outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>{item.totalBeforeTax.toFixed(2)}</td>
-                  </tr>
-                ))}
-                {/* Padding rows */}
-                {Array.from({ length: Math.max(0, 12 - currentQuote.items.length) }).map((_, i) => (
-                  <tr key={`empty-${i}`} className="min-h-[30px] border-b border-black/5 last:border-b-0">
-                    <td className="border-r border-black p-1">&nbsp;</td>
-                    <td className="border-r border-black p-1">&nbsp;</td>
-                    <td className="border-r border-black p-1">&nbsp;</td>
-                    <td className="border-r border-black p-1">&nbsp;</td>
-                    <td className="border-r border-black p-1">&nbsp;</td>
-                    <td className="border-r border-black p-1">&nbsp;</td>
-                    <td className="border-r border-black p-1">&nbsp;</td>
-                    <td className="border-r border-black p-1">&nbsp;</td>
-                    <td className="p-1">&nbsp;</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Footer Grid */}
-          <div className="grid grid-cols-12 border-b border-black">
-            <div className="col-span-7 border-r border-black p-1 flex flex-col justify-between min-h-[180px]">
-              <div className="text-[10px] space-y-1 outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                <div className="font-bold text-[11px] underline">Bank Details:</div>
-                {bankDetails && (
-                  <>
-                    <p><span className="font-bold">Bank Name:</span> {bankDetails.bankName}, {bankDetails.branch}</p>
-                    <p><span className="font-bold">A/C No:</span> {bankDetails.accountNumber}</p>
-                    <p><span className="font-bold">IFSC No:</span> {bankDetails.ifscCode}</p>
-                  </>
-                )}
-                <p className="font-bold text-[11px] mt-2">GSTIN NO: {businessProfile?.taxId}  State: {businessProfile?.state} (24)</p>
-              </div>
-              <div className="text-[9px] border-t border-black pt-1 outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                <p className="font-bold underline mb-1">Terms & Conditions:</p>
-                <div className="leading-tight space-y-0.5">
-                  <p>1. Prices are valid until {formatDate(currentQuote.expiryDate, settings?.dateFormat)}.</p>
-                  <p>2. Payment terms: As per discussion.</p>
-                  <p>3. Delivery timeline will be shared upon order confirmation.</p>
-                </div>
-              </div>
-            </div>
-            <div className="col-span-5 p-0 text-[10px] flex flex-col">
-              <div className="grid grid-cols-12 border-b border-black">
-                <div className="col-span-8 border-r border-black p-1 text-right font-medium italic">Quote Subtotal</div>
-                <div className="col-span-4 p-1 text-right font-black">{currentQuote.subtotal.toFixed(2)}</div>
-              </div>
-              <div className="grid grid-cols-12 border-b border-black bg-gray-50/50">
-                <div className="col-span-8 border-r border-black p-1 text-right font-black">SUB TOTAL</div>
-                <div className="col-span-4 p-1 text-right font-black">{currentQuote.subtotal.toFixed(2)}</div>
-              </div>
-              
-              <div className="grid grid-cols-12 border-b border-black">
-                <div className="col-span-5 border-r border-black p-1 font-bold">Discount</div>
-                <div className="col-span-3 border-r border-black p-1 text-center font-bold">
-                  {currentQuote.discountTotal > 0 ? `${((currentQuote.discountTotal / (currentQuote.subtotal || 1)) * 100).toFixed(1)}%` : '0%'}
-                </div>
-                <div className="col-span-4 p-1 text-right font-black">-{currentQuote.discountTotal.toFixed(2)}</div>
-              </div>
-
-              <div className="grid grid-cols-12 border-b border-black min-h-[50px]">
-                <div className="col-span-5 border-r border-black flex items-center justify-center font-black bg-gray-50/30 text-center text-[9px]">TAX AMOUNT</div>
-                <div className="col-span-7 p-0">
-                  {currentQuote.taxBreakdown.length > 0 ? (
-                    currentQuote.taxBreakdown.map((tax, idx) => (
-                      <div key={idx} className="grid grid-cols-12 border-b border-black last:border-b-0">
-                        <div className="col-span-5 border-r border-black p-1 text-center font-bold uppercase">{tax.taxType}</div>
-                        <div className="col-span-3 border-r border-black p-1 text-center font-medium">{tax.taxRate}%</div>
-                        <div className="col-span-4 p-1 text-right font-black">{tax.taxAmount.toFixed(2)}</div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-2 text-center text-muted-foreground italic">No Tax Applied</div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-12 font-black text-[12px] bg-gray-100 items-center border-b border-black">
-                <div className="col-span-8 border-r border-black p-2 text-right tracking-wider uppercase">TOTAL AMOUNT</div>
-                <div className="col-span-4 p-2 text-right text-[13px]">{currentQuote.grandTotal.toFixed(2)}</div>
-              </div>
-              
-              <div className="flex-grow flex flex-col outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-                <div className="text-center font-black uppercase text-[10px] py-1 border-b border-black">
-                  For {businessProfile?.businessName}
-                </div>
-                <div className="flex-grow flex items-end justify-center pb-1">
-                  <p className="font-bold text-[10px] uppercase tracking-tighter">Authorised Signatory</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Amount in Words */}
-          <div className="p-2 font-black text-[11px] bg-white flex items-center gap-2 border-b border-black outline-none focus:bg-yellow-50" contentEditable={isQuickEdit} suppressContentEditableWarning>
-            <span className="uppercase text-[9px] text-muted-foreground">In Words :</span>
-            <span className="uppercase text-[11px] tracking-tight">{grandTotalInWords} Only</span>
-          </div>
-        </div>
-      ) : (
-        <div 
-          ref={previewRef} 
-          className="bg-card border border-border shadow-sm p-8 print:shadow-none print:border-none transition-all duration-300"
-          style={{ 
-            fontFamily: template?.fontFamily || 'Inter, sans-serif',
-            borderRadius: template?.borderRadius || '8px'
-          }}
-        >
-          {/* Header Row */}
-          <div className="flex flex-col lg:flex-row justify-between items-start mb-8 gap-6">
-            <div className="min-w-0">
-              {template?.showLogo && businessProfile?.logoUrl ? (
-                <img src={businessProfile.logoUrl} alt={businessProfile.businessName} className="h-16 object-contain mb-2" />
-              ) : (
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
-                    <Building2 className="h-5 w-5 text-primary-foreground" />
-                  </div>
-                  <h1 className="text-xl font-bold text-foreground">{businessProfile?.businessName || 'Your Business'}</h1>
-                </div>
-              )}
-              {template?.headerText && (
-                <p className="text-sm text-muted-foreground mb-4">{template.headerText}</p>
-              )}
-              {businessProfile && (
-                <div className="text-sm text-muted-foreground space-y-1 mt-2">
-                  <p>{businessProfile.address}</p>
-                  <p>{businessProfile.city}, {businessProfile.state} - {businessProfile.pincode}</p>
-                  <p>{businessProfile.country}</p>
-                  <div className="flex items-center gap-4 mt-2">
-                    {businessProfile.email && (
-                      <span className="flex items-center gap-1">
-                        <Mail className="h-3 w-3" />
-                        {businessProfile.email}
-                      </span>
-                    )}
-                    {businessProfile.phone && (
-                      <span className="flex items-center gap-1">
-                        <Phone className="h-3 w-3" />
-                        {businessProfile.phone}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="text-right">
-              <h2 className="text-xl font-bold uppercase tracking-wider" style={{ color: template?.primaryColor }}>QUOTATION</h2>
-              <p className="text-2xl font-bold text-foreground mt-2">{currentQuote.quoteNumber}</p>
-              {businessProfile?.taxId && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  {settings?.taxSystem === 'GST' ? 'GSTIN' : 'Tax ID'}: {businessProfile.taxId}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <Separator className="my-6" />
-
-          {/* Bill To Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-            <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wider mb-2" style={{ color: template?.accentColor }}>Bill To</h3>
-              {customer && (
-                <div className="space-y-1">
-                  <p className="font-semibold text-foreground">{customer.name}</p>
-                  {customer.companyName && <p className="text-foreground">{customer.companyName}</p>}
-                  <p className="text-muted-foreground">{customer.billingAddress?.street}</p>
-                  <p className="text-muted-foreground">
-                    {customer.billingAddress?.city}, {customer.billingAddress?.state} - {customer.billingAddress?.pincode}
-                  </p>
-                  {customer.taxId && (
-                    <p className="text-muted-foreground mt-2">
-                      {settings?.taxSystem === 'GST' ? 'GSTIN' : 'Tax ID'}: {customer.taxId}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            {template?.showShippingAddress && customer?.shippingAddress && (
-              <div>
-                <h3 className="text-sm font-semibold uppercase tracking-wider mb-2" style={{ color: template?.accentColor }}>Ship To</h3>
-                <div className="space-y-1">
-                  <p className="font-semibold text-foreground">{customer.name}</p>
-                  <p className="text-muted-foreground">{customer.shippingAddress.street}</p>
-                  <p className="text-muted-foreground">
-                    {customer.shippingAddress.city}, {customer.shippingAddress.state} - {customer.shippingAddress.pincode}
-                  </p>
-                </div>
+                <h1 className="text-xl font-bold text-foreground">{businessProfile?.businessName || 'Your Business'}</h1>
               </div>
             )}
-
-            <div className="md:text-right">
-              <div className="space-y-2">
-                <div className="flex justify-between md:justify-end gap-4">
-                  <span className="text-muted-foreground">Issue Date:</span>
-                  <span className="font-medium">{formatDate(currentQuote.issueDate, settings?.dateFormat)}</span>
+            {template?.headerText && (
+              <p className="text-sm text-muted-foreground mb-4">{template.headerText}</p>
+            )}
+            {businessProfile && (
+              <div className="text-sm text-muted-foreground space-y-0.5 mt-2">
+                <p>{businessProfile.address}</p>
+                <p>{businessProfile.city}, {businessProfile.state} {businessProfile.pincode}</p>
+                <p>{businessProfile.country}</p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1.5">
+                  {businessProfile.email && (
+                    <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{businessProfile.email}</span>
+                  )}
+                  {businessProfile.phone && (
+                    <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{businessProfile.phone}</span>
+                  )}
                 </div>
-                <div className="flex justify-between md:justify-end gap-4">
-                  <span className="text-muted-foreground">Expiry Date:</span>
-                  <span className="font-medium">{formatDate(currentQuote.expiryDate, settings?.dateFormat)}</span>
-                </div>
-                {currentQuote.referenceNumber && (
-                  <div className="flex justify-between md:justify-end gap-4">
-                    <span className="text-muted-foreground">Reference:</span>
-                    <span className="font-medium">{currentQuote.referenceNumber}</span>
-                  </div>
+                {businessProfile.taxId && (
+                  <p className="mt-1">
+                    {settings?.taxSystem === 'GST' ? 'GSTIN' : settings?.taxSystem === 'VAT' ? 'VAT No' : 'Tax ID'}: {businessProfile.taxId}
+                  </p>
                 )}
               </div>
+            )}
+          </div>
+          <div className="text-right">
+            <div className="inline-block px-4 py-1.5 rounded-lg bg-primary/5 border border-primary/10 mb-2">
+              <h2 className="text-lg font-bold uppercase tracking-widest" style={{ color: template?.primaryColor || 'var(--primary)' }}>Quote</h2>
+            </div>
+            <p className="text-2xl font-bold text-foreground">{currentQuote.quoteNumber}</p>
+            {currentQuote.referenceNumber && (
+              <p className="text-sm text-muted-foreground mt-1">Ref: {currentQuote.referenceNumber}</p>
+            )}
+          </div>
+        </div>
+
+        <Separator className="my-6" />
+
+        {/* Bill To + Dates */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" style={{ color: template?.primaryColor }}>Quote For</h3>
+            {customer && (
+              <div className="space-y-0.5">
+                <p className="font-semibold text-foreground">{customer.name}</p>
+                {customer.companyName && <p className="text-foreground">{customer.companyName}</p>}
+                <p className="text-muted-foreground text-sm">{customer.billingAddress?.street || ''}</p>
+                <p className="text-muted-foreground text-sm">
+                  {customer.billingAddress?.city || ''}, {customer.billingAddress?.state || ''} - {customer.billingAddress?.pincode || ''}
+                </p>
+                <p className="text-muted-foreground text-sm">{customer.billingAddress?.country || ''}</p>
+                {customer.taxId && (
+                  <p className="text-muted-foreground text-sm mt-1">
+                    {settings?.taxSystem === 'GST' ? 'GSTIN' : 'Tax ID'}: {customer.taxId}
+                  </p>
+                )}
+                <p className="text-muted-foreground text-sm">{customer.email}</p>
+              </div>
+            )}
+          </div>
+          <div className="md:text-right">
+            <div className="space-y-2">
+              {[
+                { label: 'Quote Date', val: formatDate(currentQuote.issueDate, settings?.dateFormat) },
+                { label: 'Valid Until', val: formatDate(currentQuote.expiryDate, settings?.dateFormat) },
+                { label: 'Currency', val: currentQuote.currency },
+              ].map(row => (
+                <div key={row.label} className="flex justify-between md:justify-end gap-4">
+                  <span className="text-muted-foreground text-sm">{row.label}:</span>
+                  <span className={`text-sm font-medium ${row.label === 'Valid Until' && isExpiringSoon ? 'text-orange-600' : ''}`}>
+                    {row.val}
+                  </span>
+                </div>
+              ))}
+              <div className="flex justify-between md:justify-end gap-4">
+                <span className="text-muted-foreground text-sm">Status:</span>
+                <Badge className={`${statusCfg.className} text-xs gap-1`}>
+                  <StatusIcon className="h-3 w-3" />
+                  {statusCfg.label}
+                </Badge>
+              </div>
             </div>
           </div>
+        </div>
 
-          {/* Items Table */}
-          <div className="border border-border rounded-xl overflow-hidden mb-8">
-            <table className="w-full">
-              <thead style={{ backgroundColor: `${template?.primaryColor}10` }}>
-                <tr>
-                  <th className="text-left px-4 py-3 text-sm font-semibold" style={{ color: template?.primaryColor }}>#</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold" style={{ color: template?.primaryColor }}>Description</th>
-                  {template?.showQuantity && (
-                    <th className="text-right px-4 py-3 text-sm font-semibold hidden sm:table-cell" style={{ color: template?.primaryColor }}>Qty</th>
-                  )}
-                  <th className="text-right px-4 py-3 text-sm font-semibold hidden sm:table-cell" style={{ color: template?.primaryColor }}>Rate</th>
-                  <th className="text-right px-4 py-3 text-sm font-semibold hidden md:table-cell" style={{ color: template?.primaryColor }}>Tax</th>
-                  <th className="text-right px-4 py-3 text-sm font-semibold" style={{ color: template?.primaryColor }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentQuote.items.map((item, index) => (
-                  <tr key={item.id} className="border-t border-border">
-                    <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{item.name}</div>
-                      {item.description && <div className="text-sm text-muted-foreground">{item.description}</div>}
-                    </td>
-                    {template?.showQuantity && <td className="text-right px-4 py-3 hidden sm:table-cell">{item.quantity} {item.unit}</td>}
-                    <td className="text-right px-4 py-3 hidden sm:table-cell">{formatCurrency(item.unitPrice, currentQuote.currency)}</td>
-                    <td className="text-right px-4 py-3 hidden md:table-cell">{item.taxRate}%</td>
-                    <td className="text-right px-4 py-3 font-medium tracking-tight">
-                      <span className={item.isOptional ? 'line-through opacity-50' : ''}>
-                        {formatCurrency(item.totalAfterTax, currentQuote.currency)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Summary Row */}
-          <div className="flex flex-col md:flex-row justify-end">
-            <div className="w-full md:w-80 space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal:</span>
-                <span className="font-medium text-foreground">{formatCurrency(currentQuote.subtotal, currentQuote.currency)}</span>
-              </div>
-              {currentQuote.discountTotal > 0 && (
-                <div className="flex justify-between text-sm text-destructive">
-                  <span>Discount:</span>
-                  <span>-{formatCurrency(currentQuote.discountTotal, currentQuote.currency)}</span>
-                </div>
-              )}
-              {currentQuote.taxTotal > 0 && (
-                <div className="space-y-1">
-                  {currentQuote.taxBreakdown.map((tax, i) => (
-                    <div key={i} className="flex justify-between text-sm text-muted-foreground">
-                      <span>{tax.taxType} ({tax.taxRate}%):</span>
-                      <span>{formatCurrency(tax.taxAmount, currentQuote.currency)}</span>
+        {/* Items Table */}
+        <div className="border border-border rounded-lg overflow-hidden mb-8">
+          <table className="w-full">
+            <thead className="bg-muted/60">
+              <tr>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-foreground">#</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-foreground">Description</th>
+                {settings?.taxSystem === 'GST' && (
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-foreground hidden lg:table-cell">HSN/SAC</th>
+                )}
+                <th className="text-right px-4 py-3 text-xs font-semibold text-foreground hidden sm:table-cell">Qty</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-foreground hidden sm:table-cell">Rate</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-foreground hidden md:table-cell">Tax</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-foreground">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentQuote.items.map((item, idx) => (
+                <tr key={item.id} className={`border-t border-border ${item.isOptional ? 'opacity-60' : ''}`}>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{idx + 1}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{item.name}</p>
+                        {item.description && (
+                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                        )}
+                        {item.isOptional && (
+                          <Badge className="text-xs mt-1 bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400">Optional</Badge>
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-              <Separator />
-              <div className="flex justify-between items-center pt-2">
-                <span className="text-base font-bold text-foreground">Grand Total:</span>
-                <span className="text-xl font-bold" style={{ color: template?.primaryColor }}>
-                  {formatCurrency(currentQuote.grandTotal, currentQuote.currency)}
-                </span>
-              </div>
-              <div className="text-[10px] text-right text-muted-foreground italic mt-1">
-                In Words: {grandTotalInWords} Only
-              </div>
-            </div>
-          </div>
+                  </td>
+                  {settings?.taxSystem === 'GST' && (
+                    <td className="px-4 py-3 text-sm text-muted-foreground hidden lg:table-cell">
+                      {item.hsnCode || item.sacCode || '—'}
+                    </td>
+                  )}
+                  <td className="text-right px-4 py-3 text-sm hidden sm:table-cell">
+                    {item.quantity} {item.unit}
+                  </td>
+                  <td className="text-right px-4 py-3 text-sm hidden sm:table-cell">
+                    {formatCurrency(item.unitPrice, currentQuote.currency)}
+                    {item.discountPercent > 0 && (
+                      <span className="text-xs text-muted-foreground ml-1">-{item.discountPercent}%</span>
+                    )}
+                  </td>
+                  <td className="text-right px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
+                    {item.taxRate}%
+                  </td>
+                  <td className={`text-right px-4 py-3 text-sm font-medium ${item.isOptional ? 'line-through text-muted-foreground' : ''}`}>
+                    {formatCurrency(item.totalAfterTax, currentQuote.currency)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-          {currentQuote.items.some(i => i.isOptional) && (
-            <div className="mt-4 p-3 bg-muted/40 rounded-lg">
-              <p className="text-xs text-muted-foreground">
+        {/* Totals */}
+        <div className="flex justify-end mb-8">
+          <div className="w-full md:w-80 space-y-2">
+            <div className="flex justify-between py-1.5 text-sm">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="font-medium">{formatCurrency(currentQuote.subtotal, currentQuote.currency)}</span>
+            </div>
+            {currentQuote.discountTotal > 0 && (
+              <div className="flex justify-between py-1.5 text-sm">
+                <span className="text-muted-foreground">Discount</span>
+                <span className="text-destructive">-{formatCurrency(currentQuote.discountTotal, currentQuote.currency)}</span>
+              </div>
+            )}
+            {template?.showTaxBreakdown && currentQuote.taxBreakdown?.length > 0 && (
+              <>
+                {currentQuote.taxBreakdown?.map((tax, i) => (
+                  <div key={i} className="flex justify-between py-1.5 text-sm">
+                    <span className="text-muted-foreground">{tax.taxType} @ {tax.taxRate}%</span>
+                    <span>{formatCurrency(tax.taxAmount, currentQuote.currency)}</span>
+                  </div>
+                ))}
+                <Separator />
+              </>
+            )}
+            <div className="flex justify-between py-2">
+              <span className="text-base font-bold" style={{ color: template?.primaryColor || 'inherit' }}>Total</span>
+              <span className="text-base font-bold" style={{ color: template?.primaryColor || 'inherit' }}>
+                {formatCurrency(currentQuote.grandTotal, currentQuote.currency)}
+              </span>
+            </div>
+            {currentQuote.items.some(i => i.isOptional) && (
+              <p className="text-xs text-muted-foreground italic">
                 * Optional items are shown with strikethrough and not included in total.
               </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      )}
 
-      <div className="bg-card border border-border rounded-xl p-6 print:hidden">
         {/* Notes & Terms */}
-
         {(currentQuote.notes || currentQuote.terms) && (
           <>
             <Separator className="my-6" />

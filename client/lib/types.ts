@@ -254,6 +254,7 @@ export interface Document {
 export interface DocumentItem {
   id: string;
   productId?: string;
+  sku?: string;
   name: string;
   description?: string;
   hsnCode?: string;
@@ -268,7 +269,6 @@ export interface DocumentItem {
   taxAmount: number;
   totalBeforeTax: number;
   totalAfterTax: number;
-  sku?: string;
 }
 
 export interface TaxBreakdown {
@@ -438,7 +438,6 @@ export interface QuoteItem {
   description?: string;
   hsnCode?: string;
   sacCode?: string;
-  sku?: string;
   quantity: number;
   unit: UnitType;
   unitPrice: number;
@@ -494,6 +493,7 @@ export interface QuoteDashboardStats {
 export interface InvoiceTemplate {
   id: string;
   name: string;
+  layout?: 'modern' | 'traditional';
   showLogo: boolean;
   showTaxBreakdown: boolean;
   showHsnSac: boolean;
@@ -506,9 +506,8 @@ export interface InvoiceTemplate {
   showQRCode: boolean;
   primaryColor: string;
   accentColor: string;
+  borderRadius?: string;
   fontFamily: string;
-  borderRadius: string;
-  layout: 'modern' | 'traditional';
   headerText?: string;
   footerText?: string;
 }

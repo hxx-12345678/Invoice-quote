@@ -397,8 +397,6 @@ export function getDefaultTemplate(): InvoiceTemplate {
     primaryColor: '#0f172a',
     accentColor: '#3b82f6',
     fontFamily: 'Inter',
-    borderRadius: '8px',
-    layout: 'modern',
     headerText: '',
     footerText: '',
   };
@@ -421,8 +419,6 @@ export function getDefaultQuoteTemplate(): QuoteTemplate {
     primaryColor: '#0f172a',
     accentColor: '#3b82f6',
     fontFamily: 'Inter',
-    borderRadius: '8px',
-    layout: 'modern',
     headerText: '',
     footerText: '',
   };

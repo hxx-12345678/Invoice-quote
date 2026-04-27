@@ -1,4 +1,4 @@
-# 🗄️ Quotiq Database Setup Guide
+# 🗄️ InvoiceFlow Database Setup Guide
 
 ## Prerequisites
 
@@ -15,14 +15,14 @@
 psql -U postgres
 
 # Create database
-CREATE DATABASE quotiq_db;
+CREATE DATABASE invoiceflow_db;
 
 # Create user with password
-CREATE USER quotiq WITH PASSWORD 'quotiq';
+CREATE USER invoiceflow WITH PASSWORD 'invoiceflow';
 
 # Grant privileges
-ALTER ROLE quotiq WITH CREATEDB;
-GRANT ALL PRIVILEGES ON DATABASE quotiq_db TO quotiq;
+ALTER ROLE invoiceflow WITH CREATEDB;
+GRANT ALL PRIVILEGES ON DATABASE invoiceflow_db TO invoiceflow;
 
 # Exit psql
 \q
@@ -33,7 +33,7 @@ GRANT ALL PRIVILEGES ON DATABASE quotiq_db TO quotiq;
 Update `.env.local` with your PostgreSQL connection details:
 
 ```env
-DATABASE_URL="postgresql://quotiq:quotiq@localhost:5432/quotiq_db?schema=public"
+DATABASE_URL="postgresql://invoiceflow:invoiceflow@localhost:5432/invoiceflow_db?schema=public"
 ```
 
 ---
@@ -77,7 +77,7 @@ pnpm prisma:seed
 ```
 
 This creates:
-- 1 test user (test@quotiq.com / password123)
+- 1 test user (test@invoiceflow.com / password123)
 - 1 sample business profile
 - 2 sample customers
 - 3 sample products

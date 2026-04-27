@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": ".",
-    "moduleResolution": "Node16",
+    "moduleResolution": "node16",
     "resolveJsonModule": true,
     "typeRoots": ["./node_modules/@types", "./types"]
   },
