@@ -12,10 +12,21 @@ export function setupAppMiddleware(app: Express): void {
   app.use(helmet());
 
   // CORS configuration
-  const corsOrigin = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',');
+  const corsOrigins = [
+    ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []),
+    process.env.FRONTEND_URL,
+    'http://localhost:3000'
+  ].filter(Boolean) as string[];
+
   app.use(
     cors({
-      origin: corsOrigin,
+      origin: function (origin, callback) {
+        if (!origin || corsOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
