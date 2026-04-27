@@ -69,17 +69,30 @@ export default function InvoicePage() {
         AuthStore.setUser(userRes.data.data);
         setIsAuthenticated(true);
 
-        // Load business profile
-        const profileRes = await ApiService.business.get();
-        if (profileRes.data.data) {
-          setBusinessProfile(profileRes.data.data);
-          BusinessProfileStore.set(profileRes.data.data);
+        // Load business profile (optional - new users may not have created one yet)
+        try {
+          const profileRes = await ApiService.business.get();
+          if (profileRes.data.data) {
+            setBusinessProfile(profileRes.data.data);
+            BusinessProfileStore.set(profileRes.data.data);
+          }
+        } catch (profileError: any) {
+          // 404 is expected if business profile not created yet
+          if (profileError.response?.status !== 404) {
+            console.warn('Failed to load business profile:', profileError);
+          }
+          setBusinessProfile(null);
         }
 
-        // Load settings
-        const settingsRes = await ApiService.settings.get();
-        if (settingsRes.data.data) {
-          UserSettingsStore.set(settingsRes.data.data);
+        // Load settings (optional - use defaults if not set)
+        try {
+          const settingsRes = await ApiService.settings.get();
+          if (settingsRes.data.data) {
+            UserSettingsStore.set(settingsRes.data.data);
+          }
+        } catch (settingsError: any) {
+          console.warn('Failed to load settings:', settingsError);
+          // Use default settings - not a fatal error
         }
 
         setIsCheckingAuth(false);
