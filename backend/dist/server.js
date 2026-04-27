@@ -13,12 +13,15 @@ const productRoutes_1 = __importDefault(require("./routes/productRoutes"));
 const documentRoutes_1 = __importDefault(require("./routes/documentRoutes"));
 const quoteRoutes_1 = __importDefault(require("./routes/quoteRoutes"));
 const settingsRoutes_1 = __importDefault(require("./routes/settingsRoutes"));
+const healthRoutes_1 = __importDefault(require("./routes/healthRoutes"));
 const auth_1 = require("./middleware/auth");
 const errorHandler_1 = __importDefault(require("./middleware/errorHandler"));
 const database_1 = require("./config/database");
 dotenv_1.default.config({ path: './.env' });
 const app = (0, express_1.default)();
 (0, app_1.default)(app);
+// Public health check endpoint (no auth required)
+app.use('/api', healthRoutes_1.default);
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/business', auth_1.authMiddleware, businessRoutes_1.default);
 app.use('/api/customers', auth_1.authMiddleware, customerRoutes_1.default);

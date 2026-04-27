@@ -8,6 +8,7 @@ import productRoutes from './routes/productRoutes';
 import documentRoutes from './routes/documentRoutes';
 import quoteRoutes from './routes/quoteRoutes';
 import settingsRoutes from './routes/settingsRoutes';
+import healthRoutes from './routes/healthRoutes';
 import { authMiddleware } from './middleware/auth';
 import errorHandler from './middleware/errorHandler';
 import { testDatabaseConnection } from './config/database';
@@ -16,6 +17,9 @@ dotenv.config({ path: './.env' });
 
 const app = express();
 setupAppMiddleware(app);
+
+// Public health check endpoint (no auth required)
+app.use('/api', healthRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/business', authMiddleware, businessRoutes);

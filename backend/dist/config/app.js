@@ -15,9 +15,20 @@ function setupAppMiddleware(app) {
     // Security middleware
     app.use((0, helmet_1.default)());
     // CORS configuration
-    const corsOrigin = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',');
+    const corsOrigins = [
+        ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []),
+        process.env.FRONTEND_URL,
+        'http://localhost:3000'
+    ].filter(Boolean);
     app.use((0, cors_1.default)({
-        origin: corsOrigin,
+        origin: function (origin, callback) {
+            if (!origin || corsOrigins.includes(origin)) {
+                callback(null, true);
+            }
+            else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
